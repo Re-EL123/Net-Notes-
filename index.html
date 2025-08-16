@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Net Notes</title>
+  <style>
+    /* ====== Global Styles ====== */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f6f9;
+      color: #333;
+    }
+    header {
+      background: #1e88e5;
+      color: white;
+      padding: 15px;
+      text-align: center;
+      font-size: 22px;
+      font-weight: bold;
+    }
+    .container {
+      width: 95%;
+      max-width: 1000px;
+      margin: 20px auto;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+      padding: 20px;
+    }
+    h2 { margin-bottom: 15px; }
+    input, textarea, button {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    button {
+      background: #1e88e5;
+      color: white;
+      border: none;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    button:hover { background: #1565c0; }
+
+    /* ====== Auth Section ====== */
+    #auth-section { text-align: center; }
+    .auth-box {
+      max-width: 400px;
+      margin: 0 auto;
+    }
+    .toggle-auth { 
+      color: #1e88e5;
+      cursor: pointer; 
+      display: block;
+      margin-top: 10px;
+    }
+
+    /* ====== Dashboard ====== */
+    #dashboard { display: none; }
+    .tabs {
+      display: flex;
+      border-bottom: 2px solid #ddd;
+      margin-bottom: 20px;
+    }
+    .tab {
+      flex: 1;
+      padding: 12px;
+      text-align: center;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .tab.active {
+      border-bottom: 3px solid #1e88e5;
+      color: #1e88e5;
+    }
+    .content { display: none; }
+    .content.active { display: block; }
+
+    /* ====== Notes & Tasks ====== */
+    .note, .task {
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      margin: 10px 0;
+      background: #fafafa;
+      position: relative;
+    }
+    .delete-btn {
+      position: absolute;
+      right: 10px;
+      top: 10px;
+      background: #e53935;
+      border: none;
+      color: white;
+      padding: 5px 10px;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .task.completed { text-decoration: line-through; color: #777; }
+    .logout-btn { float: right; background: #e53935; }
+  </style>
+</head>
+<body>
+  <header>
+    Net Notes
+    <button class="logout-btn" onclick="logout()">Logout</button>
+  </header>
+
+  <div class="container">
+    <!-- ===== Authentication ===== -->
+    <div id="auth-section">
+      <h2>Login</h2>
+      <div class="auth-box">
+        <input type="text" id="auth-username" placeholder="Username" />
+        <input type="password" id="auth-password" placeholder="Password" />
+        <button onclick="login()">Login</button>
+        <span class="toggle-auth" onclick="toggleAuthMode()">Don't have an account? Register</span>
+      </div>
+    </div>
+
+    <!-- ===== Dashboard ===== -->
+    <div id="dashboard">
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('notes')">Notes</div>
+        <div class="tab" onclick="switchTab('tasks')">Tasks</div>
+      </div>
+
+      <!-- Notes -->
+      <div id="notes" class="content active">
+        <h2>Your Notes</h2>
+        <textarea id="note-input" placeholder="Write a new note..."></textarea>
+        <button onclick="addNote()">Add Note</button>
+        <div id="notes-list"></div>
+      </div>
+
+      <!-- Tasks -->
+      <div id="tasks" class="content">
+        <h2>Your Tasks</h2>
+        <input type="text" id="task-input" placeholder="Enter new task..." />
+        <button onclick="addTask()">Add Task</button>
+        <div id="tasks-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentUser = null;
+    let isRegistering = false;
+
+    // ===== Auth Functions =====
+    function toggleAuthMode() {
+      isRegistering = !isRegistering;
+      document.querySelector("#auth-section h2").innerText = isRegistering ? "Register" : "Login";
+      document.querySelector("#auth-section button").innerText = isRegistering ? "Register" : "Login";
+      document.querySelector(".toggle-auth").innerText = isRegistering ? "Already have an account? Login" : "Don't have an account? Register";
+    }
+
+    function login() {
+      const username = document.getElementById("auth-username").value.trim();
+      const password = document.getElementById("auth-password").value.trim();
+
+      if (!username || !password) {
+        alert("Please enter username and password.");
+        return;
+      }
+
+      let users = JSON.parse(localStorage.getItem("users")) || {};
+
+      if (isRegistering) {
+        if (users[username]) {
+          alert("User already exists!");
+          return;
+        }
+        users[username] = { password, notes: [], tasks: [] };
+        localStorage.setItem("users", JSON.stringify(users));
+        alert("Registration successful! You can now log in.");
+        toggleAuthMode();
+      } else {
+        if (!users[username] || users[username].password !== password) {
+          alert("Invalid credentials!");
+          return;
+        }
+        currentUser = username;
+        document.getElementById("auth-section").style.display = "none";
+        document.getElementById("dashboard").style.display = "block";
+        loadData();
+      }
+    }
+
+    function logout() {
+      currentUser = null;
+      document.getElementById("auth-section").style.display = "block";
+      document.getElementById("dashboard").style.display = "none";
+      document.getElementById("auth-username").value = "";
+      document.getElementById("auth-password").value = "";
+    }
+
+    // ===== Notes =====
+    function addNote() {
+      const noteInput = document.getElementById("note-input");
+      const noteText = noteInput.value.trim();
+      if (!noteText) return;
+
+      let users = JSON.parse(localStorage.getItem("users"));
+      users[currentUser].notes.push(noteText);
+      localStorage.setItem("users", JSON.stringify(users));
+
+      noteInput.value = "";
+      loadNotes();
+    }
+
+    function deleteNote(index) {
+      let users = JSON.parse(localStorage.getItem("users"));
+      users[currentUser].notes.splice(index, 1);
+      localStorage.setItem("users", JSON.stringify(users));
+      loadNotes();
+    }
+
+    function loadNotes() {
+      const notesList = document.getElementById("notes-list");
+      notesList.innerHTML = "";
+      let users = JSON.parse(localStorage.getItem("users"));
+      users[currentUser].notes.forEach((note, i) => {
+        notesList.innerHTML += `
+          <div class="note">
+            ${note}
+            <button class="delete-btn" onclick="deleteNote(${i})">Delete</button>
+          </div>`;
+      });
+    }
+
+    // ===== Tasks =====
+    function addTask() {
+      const taskInput = document.getElementById("task-input");
+      const taskText = taskInput.value.trim();
+      if (!taskText) return;
+
+      let users = JSON.parse(localStorage.getItem("users"));
+      users[currentUser].tasks.push({ text: taskText, completed: false });
+      localStorage.setItem("users", JSON.stringify(users));
+
+      taskInput.value = "";
+      loadTasks();
+    }
+
+    function toggleTask(index) {
+      let users = JSON.parse(localStorage.getItem("users"));
+      users[currentUser].tasks[index].completed = !users[currentUser].tasks[index].completed;
+      localStorage.setItem("users", JSON.stringify(users));
+      loadTasks();
+    }
+
+    function deleteTask(index) {
+      let users = JSON.parse(localStorage.getItem("users"));
+      users[currentUser].tasks.splice(index, 1);
+      localStorage.setItem("users", JSON.stringify(users));
+      loadTasks();
+    }
+
+    function loadTasks() {
+      const tasksList = document.getElementById("tasks-list");
+      tasksList.innerHTML = "";
+      let users = JSON.parse(localStorage.getItem("users"));
+      users[currentUser].tasks.forEach((task, i) => {
+        tasksList.innerHTML += `
+          <div class="task ${task.completed ? "completed" : ""}" onclick="toggleTask(${i})">
+            ${task.text}
+            <button class="delete-btn" onclick="event.stopPropagation(); deleteTask(${i})">Delete</button>
+          </div>`;
+      });
+    }
+
+    // ===== Tabs =====
+    function switchTab(tab) {
+      document.querySelectorAll(".tab").forEach(el => el.classList.remove("active"));
+      document.querySelectorAll(".content").forEach(el => el.classList.remove("active"));
+
+      document.querySelector(`.tab:nth-child(${tab === 'notes' ? 1 : 2})`).classList.add("active");
+      document.getElementById(tab).classList.add("active");
+    }
+
+    function loadData() {
+      loadNotes();
+      loadTasks();
+    }
+  </script>
+</body>
+</html>
