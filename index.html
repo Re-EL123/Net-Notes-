@@ -13,7 +13,7 @@
     }
 
     header {
-      background: #4a90e2;
+      background: linear-gradient(90deg, #667eea, #764ba2, #4a47a3);
       color: white;
       padding: 15px 25px;
       display: flex;
@@ -33,17 +33,18 @@
 
     header nav button {
       background: white;
-      color: #4a90e2;
+      color: #4a47a3;
       border: none;
       padding: 8px 15px;
       border-radius: 6px;
       cursor: pointer;
       font-weight: bold;
-      transition: background 0.3s;
+      transition: background 0.3s, color 0.3s;
     }
 
     header nav button:hover {
-      background: #e6f0fb;
+      background: #37338e;
+      color: white;
     }
 
     main {
@@ -68,7 +69,7 @@
     section h2 {
       margin-top: 0;
       margin-bottom: 15px;
-      color: #4a90e2;
+      color: #4a47a3;
     }
 
     .input-area {
@@ -89,11 +90,16 @@
     .input-area button {
       padding: 10px 15px;
       border: none;
-      background: #4a90e2;
+      background: #667eea;
       color: white;
       border-radius: 6px;
       cursor: pointer;
       font-weight: bold;
+      transition: background 0.3s;
+    }
+
+    .input-area button:hover {
+      background: #37338e;
     }
 
     .cards {
@@ -131,11 +137,12 @@
       border: none;
       background: transparent;
       cursor: pointer;
-      color: #4a90e2;
+      color: #764ba2;
       font-weight: bold;
     }
 
     .card-actions button:hover {
+      color: #37338e;
       text-decoration: underline;
     }
 
@@ -195,14 +202,13 @@
     &copy; 2025 Net Notes | Simple Online Notepad & Task Manager
   </footer>
 
-  <!-- Firebase -->
-  <script type="module">
-    // Import Firebase
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-    import { getFirestore, collection, addDoc, getDocs, doc, deleteDoc, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js"></script>
 
-    // Firebase Config
+  <script>
+    // Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyCA2KeSCcbvyYXixnLnxQtinmwDVFQEohY",
       authDomain: "re-el-apps.firebaseapp.com",
@@ -213,86 +219,46 @@
       measurementId: "G-C2EE49KYC4"
     };
 
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
+    // Init Firebase
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
 
     let currentUser = null;
     let notes = [];
     let tasks = [];
 
-    onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        currentUser = user;
-        await loadData();
+    // Auth state detection
+    auth.onAuthStateChanged(user => {
+      if (!user) {
+        window.location.href = "auth.html"; // redirect if not logged in
       } else {
-        window.location.href = "auth.html";
+        currentUser = user;
+        loadData();
       }
     });
 
+    // Save to Firestore
+    async function saveData() {
+      if (!currentUser) return;
+      const userRef = db.collection("users").doc(currentUser.uid);
+      await userRef.set({ notes, tasks });
+    }
+
+    // Load from Firestore
     async function loadData() {
-      // Load notes
-      const notesSnap = await getDocs(collection(db, "users", currentUser.uid, "notes"));
-      notes = notesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-      // Load tasks
-      const tasksSnap = await getDocs(collection(db, "users", currentUser.uid, "tasks"));
-      tasks = tasksSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
+      if (!currentUser) return;
+      const userRef = db.collection("users").doc(currentUser.uid);
+      const docSnap = await userRef.get();
+      if (docSnap.exists) {
+        notes = docSnap.data().notes || [];
+        tasks = docSnap.data().tasks || [];
+      }
       renderNotes();
       renderTasks();
     }
 
-    async function addNote() {
-      const noteInput = document.getElementById('noteInput');
-      if (noteInput.value.trim() !== '') {
-        const docRef = await addDoc(collection(db, "users", currentUser.uid, "notes"), {
-          text: noteInput.value.trim()
-        });
-        notes.push({ id: docRef.id, text: noteInput.value.trim() });
-        noteInput.value = '';
-        renderNotes();
-      }
-    }
-
-    async function deleteNote(index) {
-      await deleteDoc(doc(db, "users", currentUser.uid, "notes", notes[index].id));
-      notes.splice(index, 1);
-      renderNotes();
-    }
-
-    async function addTask() {
-      const taskInput = document.getElementById('taskInput');
-      const taskReminder = document.getElementById('taskReminder');
-      if (taskInput.value.trim() !== '') {
-        const task = {
-          text: taskInput.value.trim(),
-          reminder: taskReminder.value || null,
-          done: false
-        };
-        const docRef = await addDoc(collection(db, "users", currentUser.uid, "tasks"), task);
-        tasks.push({ id: docRef.id, ...task });
-        taskInput.value = '';
-        taskReminder.value = '';
-        renderTasks();
-      }
-    }
-
-    async function toggleTask(index) {
-      tasks[index].done = !tasks[index].done;
-      await updateDoc(doc(db, "users", currentUser.uid, "tasks", tasks[index].id), {
-        done: tasks[index].done
-      });
-      renderTasks();
-    }
-
-    async function deleteTask(index) {
-      await deleteDoc(doc(db, "users", currentUser.uid, "tasks", tasks[index].id));
-      tasks.splice(index, 1);
-      renderTasks();
-    }
-
-    // Rendering functions
+    // Notes rendering
     function renderNotes() {
       const notesList = document.getElementById('notesList');
       notesList.innerHTML = '';
@@ -300,9 +266,9 @@
         const card = document.createElement('div');
         card.className = 'card';
         card.innerHTML = `
-          <p>${note.text}</p>
+          <p>${note}</p>
           <div class="card-actions">
-            <button onclick="share('${note.text}')">Share</button>
+            <button onclick="share('${note}')">Share</button>
             <button onclick="deleteNote(${index})">Delete</button>
           </div>
         `;
@@ -310,13 +276,19 @@
       });
     }
 
+    // Tasks rendering
     function renderTasks() {
       const tasksList = document.getElementById('tasksList');
       tasksList.innerHTML = '';
       tasks.forEach((task, index) => {
-        const isDone = task.done ? "task-done" : "";
         const card = document.createElement('div');
         card.className = 'card';
+        card.draggable = true;
+        card.setAttribute("ondragstart", "dragStart(event, " + index + ")");
+        card.setAttribute("ondragover", "dragOver(event)");
+        card.setAttribute("ondrop", "dropTask(event, " + index + ")");
+        
+        const isDone = task.done ? "task-done" : "";
         card.innerHTML = `
           <div>
             <input type="checkbox" ${task.done ? "checked" : ""} onchange="toggleTask(${index})">
@@ -332,32 +304,80 @@
       });
     }
 
-    // Utility
+    // CRUD Functions
+    function addNote() {
+      const noteInput = document.getElementById('noteInput');
+      if (noteInput.value.trim() !== '') {
+        notes.push(noteInput.value.trim());
+        noteInput.value = '';
+        saveData();
+        renderNotes();
+      }
+    }
+
+    function addTask() {
+      const taskInput = document.getElementById('taskInput');
+      const taskReminder = document.getElementById('taskReminder');
+      if (taskInput.value.trim() !== '') {
+        tasks.push({
+          text: taskInput.value.trim(),
+          reminder: taskReminder.value || null,
+          done: false
+        });
+        taskInput.value = '';
+        taskReminder.value = '';
+        saveData();
+        renderTasks();
+      }
+    }
+
+    function toggleTask(index) {
+      tasks[index].done = !tasks[index].done;
+      saveData();
+      renderTasks();
+    }
+
+    function deleteNote(index) {
+      notes.splice(index, 1);
+      saveData();
+      renderNotes();
+    }
+
+    function deleteTask(index) {
+      tasks.splice(index, 1);
+      saveData();
+      renderTasks();
+    }
+
     function share(content) {
       if (navigator.share) {
-        navigator.share({ title: 'Shared from Net Notes', text: content });
+        navigator.share({
+          title: 'Shared from Net Notes',
+          text: content
+        }).catch(err => console.log(err));
       } else {
         alert("Sharing not supported on this browser.");
       }
     }
 
     function logout() {
-      signOut(auth).then(() => {
-        window.location.href = "auth.html";
-      });
+      auth.signOut();
     }
 
     function openSettings() {
-      alert("Settings page coming soon!");
+      alert("Settings page will be added soon.");
     }
 
-    window.addNote = addNote;
-    window.addTask = addTask;
-    window.deleteNote = deleteNote;
-    window.deleteTask = deleteTask;
-    window.toggleTask = toggleTask;
-    window.share = share;
-    window.logout = logout;
+    // Drag & Drop functions
+    let draggedTaskIndex = null;
+    function dragStart(event, index) { draggedTaskIndex = index; }
+    function dragOver(event) { event.preventDefault(); }
+    function dropTask(event, index) {
+      const draggedTask = tasks.splice(draggedTaskIndex, 1)[0];
+      tasks.splice(index, 0, draggedTask);
+      saveData();
+      renderTasks();
+    }
   </script>
 </body>
 </html>
