@@ -26,6 +26,11 @@
       font-size: 1.5rem;
     }
 
+    header nav {
+      display: flex;
+      gap: 10px;
+    }
+
     header nav button {
       background: white;
       color: #4a90e2;
@@ -69,6 +74,8 @@
     .input-area {
       display: flex;
       margin-bottom: 15px;
+      gap: 10px;
+      flex-wrap: wrap;
     }
 
     .input-area input, .input-area textarea {
@@ -80,7 +87,6 @@
     }
 
     .input-area button {
-      margin-left: 10px;
       padding: 10px 15px;
       border: none;
       background: #4a90e2;
@@ -118,6 +124,7 @@
     .card-actions {
       display: flex;
       justify-content: space-between;
+      align-items: center;
     }
 
     .card-actions button {
@@ -132,6 +139,11 @@
       text-decoration: underline;
     }
 
+    .task-done {
+      text-decoration: line-through;
+      color: gray;
+    }
+
     footer {
       text-align: center;
       padding: 10px;
@@ -139,12 +151,19 @@
       font-size: 0.9rem;
       color: #555;
     }
+
+    .reminder {
+      font-size: 0.8rem;
+      color: #666;
+      margin-top: 5px;
+    }
   </style>
 </head>
 <body>
   <header>
     <h1>Net Notes</h1>
     <nav>
+      <button onclick="openSettings()">Settings</button>
       <button onclick="logout()">Logout</button>
     </nav>
   </header>
@@ -165,6 +184,7 @@
       <h2>Tasks</h2>
       <div class="input-area">
         <input type="text" id="taskInput" placeholder="Add a new task...">
+        <input type="datetime-local" id="taskReminder">
         <button onclick="addTask()">Add</button>
       </div>
       <div class="cards" id="tasksList"></div>
@@ -185,6 +205,7 @@
       localStorage.setItem('tasks', JSON.stringify(tasks));
     }
 
+    // Notes rendering
     function renderNotes() {
       const notesList = document.getElementById('notesList');
       notesList.innerHTML = '';
@@ -202,16 +223,27 @@
       });
     }
 
+    // Tasks rendering
     function renderTasks() {
       const tasksList = document.getElementById('tasksList');
       tasksList.innerHTML = '';
       tasks.forEach((task, index) => {
         const card = document.createElement('div');
         card.className = 'card';
+        card.draggable = true;
+        card.setAttribute("ondragstart", "dragStart(event, " + index + ")");
+        card.setAttribute("ondragover", "dragOver(event)");
+        card.setAttribute("ondrop", "dropTask(event, " + index + ")");
+        
+        const isDone = task.done ? "task-done" : "";
         card.innerHTML = `
-          <p>${task}</p>
+          <div>
+            <input type="checkbox" ${task.done ? "checked" : ""} onchange="toggleTask(${index})">
+            <span class="${isDone}">${task.text}</span>
+            ${task.reminder ? `<div class="reminder">⏰ ${new Date(task.reminder).toLocaleString()}</div>` : ""}
+          </div>
           <div class="card-actions">
-            <button onclick="share('${task}')">Share</button>
+            <button onclick="share('${task.text}')">Share</button>
             <button onclick="deleteTask(${index})">Delete</button>
           </div>
         `;
@@ -231,12 +263,24 @@
 
     function addTask() {
       const taskInput = document.getElementById('taskInput');
+      const taskReminder = document.getElementById('taskReminder');
       if (taskInput.value.trim() !== '') {
-        tasks.push(taskInput.value.trim());
+        tasks.push({
+          text: taskInput.value.trim(),
+          reminder: taskReminder.value || null,
+          done: false
+        });
         taskInput.value = '';
+        taskReminder.value = '';
         saveData();
         renderTasks();
       }
+    }
+
+    function toggleTask(index) {
+      tasks[index].done = !tasks[index].done;
+      saveData();
+      renderTasks();
     }
 
     function deleteNote(index) {
@@ -266,6 +310,29 @@
       alert("Logout functionality will be added with Firebase later.");
     }
 
+    function openSettings() {
+      alert("Settings page will be added soon.");
+    }
+
+    // Drag & Drop functions
+    let draggedTaskIndex = null;
+
+    function dragStart(event, index) {
+      draggedTaskIndex = index;
+    }
+
+    function dragOver(event) {
+      event.preventDefault();
+    }
+
+    function dropTask(event, index) {
+      const draggedTask = tasks.splice(draggedTaskIndex, 1)[0];
+      tasks.splice(index, 0, draggedTask);
+      saveData();
+      renderTasks();
+    }
+
+    // Initial render
     renderNotes();
     renderTasks();
   </script>
