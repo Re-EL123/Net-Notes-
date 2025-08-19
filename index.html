@@ -170,8 +170,8 @@
   <header>
     <h1>Net Notes</h1>
     <nav>
-      <button onclick="openSettings()">Settings</button>
-      <button onclick="logout()">Logout</button>
+      <button id="settingsBtn">Settings</button>
+      <button id="logoutBtn">Logout</button>
     </nav>
   </header>
 
@@ -181,7 +181,7 @@
       <h2>Notes</h2>
       <div class="input-area">
         <textarea id="noteInput" placeholder="Write a new note..."></textarea>
-        <button onclick="addNote()">Add</button>
+        <button id="addNoteBtn">Add</button>
       </div>
       <div class="cards" id="notesList"></div>
     </section>
@@ -192,7 +192,7 @@
       <div class="input-area">
         <input type="text" id="taskInput" placeholder="Add a new task...">
         <input type="datetime-local" id="taskReminder">
-        <button onclick="addTask()">Add</button>
+        <button id="addTaskBtn">Add</button>
       </div>
       <div class="cards" id="tasksList"></div>
     </section>
@@ -224,28 +224,28 @@
     const auth = firebase.auth();
     const db = firebase.firestore();
 
+    // ====== VARIABLES ======
     let currentUser = null;
     let notes = [];
     let tasks = [];
 
-    // Auth state detection
+    // ====== AUTH ======
     auth.onAuthStateChanged(user => {
       if (!user) {
-        window.location.href = "auth.html"; // redirect if not logged in
+        window.location.href = "auth.html";
       } else {
         currentUser = user;
         loadData();
       }
     });
 
-    // Save to Firestore
+    // ====== SAVE / LOAD ======
     async function saveData() {
       if (!currentUser) return;
       const userRef = db.collection("users").doc(currentUser.uid);
       await userRef.set({ notes, tasks });
     }
 
-    // Load from Firestore
     async function loadData() {
       if (!currentUser) return;
       const userRef = db.collection("users").doc(currentUser.uid);
@@ -258,7 +258,7 @@
       renderTasks();
     }
 
-    // Notes rendering
+    // ====== RENDER ======
     function renderNotes() {
       const notesList = document.getElementById('notesList');
       notesList.innerHTML = '';
@@ -276,7 +276,6 @@
       });
     }
 
-    // Tasks rendering
     function renderTasks() {
       const tasksList = document.getElementById('tasksList');
       tasksList.innerHTML = '';
@@ -304,7 +303,7 @@
       });
     }
 
-    // CRUD Functions
+    // ====== CRUD ======
     function addNote() {
       const noteInput = document.getElementById('noteInput');
       if (noteInput.value.trim() !== '') {
@@ -368,7 +367,7 @@
       alert("Settings page will be added soon.");
     }
 
-    // Drag & Drop functions
+    // ====== DRAG & DROP ======
     let draggedTaskIndex = null;
     function dragStart(event, index) { draggedTaskIndex = index; }
     function dragOver(event) { event.preventDefault(); }
@@ -378,6 +377,13 @@
       saveData();
       renderTasks();
     }
+
+    // ====== EVENT LISTENERS ======
+    document.getElementById('addNoteBtn').addEventListener('click', addNote);
+    document.getElementById('addTaskBtn').addEventListener('click', addTask);
+    document.getElementById('settingsBtn').addEventListener('click', openSettings);
+    document.getElementById('logoutBtn').addEventListener('click', logout);
+
   </script>
 </body>
 </html>
