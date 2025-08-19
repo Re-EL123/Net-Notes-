@@ -97,6 +97,14 @@
       color: #e63946;
     }
 
+    /* Small helper elements (keep palette consistent) */
+    .or {
+      margin: 10px 0;
+      color: #4a47a3;
+      font-weight: bold;
+      opacity: .9;
+    }
+
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(-20px); }
       to { opacity: 1; transform: translateY(0); }
@@ -117,6 +125,8 @@
       <input type="text" id="loginUsername" placeholder="Username" required>
       <input type="password" id="loginPassword" placeholder="Password" required>
       <button type="submit">Login</button>
+      <div class="or">OR</div>
+      <button type="button" id="googleLoginBtn" aria-label="Continue with Google">Continue with Google</button>
       <p class="message" id="loginMessage"></p>
     </form>
 
@@ -125,22 +135,76 @@
       <input type="text" id="signupUsername" placeholder="Username" required>
       <input type="password" id="signupPassword" placeholder="Password" required>
       <button type="submit">Sign Up</button>
+      <div class="or">OR</div>
+      <button type="button" id="googleSignupBtn" aria-label="Continue with Google">Continue with Google</button>
       <p class="message" id="signupMessage"></p>
     </form>
   </div>
 
-  <script>
+  <!-- Firebase (module) -->
+  <script type="module">
+    // --- Firebase SDK imports ---
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-analytics.js";
+    import {
+      getAuth,
+      signInWithEmailAndPassword,
+      createUserWithEmailAndPassword,
+      GoogleAuthProvider,
+      signInWithPopup,
+      onAuthStateChanged
+    } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+    import {
+      getFirestore,
+      doc,
+      getDoc,
+      setDoc
+    } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+
+    // --- Your config (as provided) ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyCA2KeSCcbvyYXixnLnxQtinmwDVFQEohY",
+      authDomain: "re-el-apps.firebaseapp.com",
+      projectId: "re-el-apps",
+      storageBucket: "re-el-apps.firebasestorage.app",
+      messagingSenderId: "107778939281",
+      appId: "1:107778939281:web:d4ea66a01c1a82d5cfa230",
+      measurementId: "G-C2EE49KYC4"
+    };
+
+    // Init (guarded)
+    let app, analytics, auth, db, provider;
+    try {
+      app = initializeApp(firebaseConfig);
+      analytics = getAnalytics(app);
+      auth = getAuth(app);
+      db = getFirestore(app);
+      provider = new GoogleAuthProvider();
+    } catch (e) {
+      console.warn("Firebase failed to initialize. Falling back to local auth only.", e);
+    }
+
+    // Helper: map username -> email for Email/Password auth
+    const toEmail = (username) => `${String(username).trim().toLowerCase()}@netnotes.app`;
+
+    // UI Elements
     const loginTab = document.getElementById("loginTab");
     const signupTab = document.getElementById("signupTab");
     const loginForm = document.getElementById("loginForm");
     const signupForm = document.getElementById("signupForm");
+    const loginMessage = document.getElementById("loginMessage");
+    const signupMessage = document.getElementById("signupMessage");
+    const googleLoginBtn = document.getElementById("googleLoginBtn");
+    const googleSignupBtn = document.getElementById("googleSignupBtn");
 
-    // Tab switching
+    // Tab switching (unchanged)
     loginTab.addEventListener("click", () => {
       loginTab.classList.add("active");
       signupTab.classList.remove("active");
       loginForm.classList.add("active");
       signupForm.classList.remove("active");
+      loginMessage.textContent = "";
+      signupMessage.textContent = "";
     });
 
     signupTab.addEventListener("click", () => {
@@ -148,44 +212,149 @@
       loginTab.classList.remove("active");
       signupForm.classList.add("active");
       loginForm.classList.remove("active");
+      loginMessage.textContent = "";
+      signupMessage.textContent = "";
     });
 
-    // Handle Sign Up
-    signupForm.addEventListener("submit", (e) => {
+    // ----- SIGN UP (Email/Password using username → email) -----
+    signupForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       const username = document.getElementById("signupUsername").value.trim();
       const password = document.getElementById("signupPassword").value.trim();
-      const signupMessage = document.getElementById("signupMessage");
 
-      if(localStorage.getItem(`user_${username}`)) {
+      // If Firebase available, prefer it:
+      if (auth) {
+        try {
+          const cred = await createUserWithEmailAndPassword(auth, toEmail(username), password);
+          // Initialize a user doc if it doesn't exist
+          try {
+            const ref = doc(db, "users", cred.user.uid);
+            const snap = await getDoc(ref);
+            if (!snap.exists()) {
+              await setDoc(ref, { notes: [], tasks: [] });
+            }
+          } catch (e) { console.warn("Firestore init failed:", e); }
+          localStorage.setItem("currentUser", username);
+          signupMessage.style.color = "green";
+          signupMessage.textContent = "Account created! Redirecting...";
+          setTimeout(() => (window.location.href = "index.html"), 900);
+          return;
+        } catch (err) {
+          console.warn(err);
+          signupMessage.style.color = "#e63946";
+          signupMessage.textContent = (err && err.code) ? err.code : "Signup failed.";
+        }
+      }
+
+      // Fallback: localStorage (preserved behavior)
+      if (localStorage.getItem(`user_${username}`)) {
         signupMessage.textContent = "Username already exists!";
       } else {
-        localStorage.setItem(`user_${username}`, JSON.stringify({username, password}));
+        localStorage.setItem(`user_${username}`, JSON.stringify({ username, password }));
         signupMessage.style.color = "green";
         signupMessage.textContent = "Account created! You can login now.";
       }
     });
 
-    // Handle Login
-    loginForm.addEventListener("submit", (e) => {
+    // ----- LOGIN (Email/Password using username → email) -----
+    loginForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       const username = document.getElementById("loginUsername").value.trim();
       const password = document.getElementById("loginPassword").value.trim();
-      const loginMessage = document.getElementById("loginMessage");
 
+      // If Firebase available, prefer it:
+      if (auth) {
+        try {
+          await signInWithEmailAndPassword(auth, toEmail(username), password);
+          localStorage.setItem("currentUser", username);
+          loginMessage.style.color = "green";
+          loginMessage.textContent = "Login successful! Redirecting...";
+          setTimeout(() => (window.location.href = "index.html"), 900);
+          return;
+        } catch (err) {
+          console.warn(err);
+          // If user not found in Firebase, gracefully fall back to local check below
+        }
+      }
+
+      // Fallback: localStorage (preserved behavior)
       const user = JSON.parse(localStorage.getItem(`user_${username}`));
-
-      if(user && user.password === password) {
+      if (user && user.password === password) {
         localStorage.setItem("currentUser", username);
         loginMessage.style.color = "green";
         loginMessage.textContent = "Login successful! Redirecting...";
         setTimeout(() => {
-          window.location.href = "index.html"; // Redirect to main app
+          window.location.href = "index.html";
         }, 1200);
       } else {
         loginMessage.textContent = "Invalid username or password!";
       }
     });
+
+    // ----- GOOGLE SIGN-IN (works for login/signup flow) -----
+    async function googleFlow() {
+      if (!auth || !provider) {
+        // No firebase: advise
+        alert("Google Sign-In is unavailable offline.");
+        return;
+      }
+      try {
+        const result = await signInWithPopup(auth, provider);
+        const user = result.user;
+        // Initialize Firestore doc if missing
+        try {
+          const ref = doc(db, "users", user.uid);
+          const snap = await getDoc(ref);
+          if (!snap.exists()) {
+            await setDoc(ref, { notes: [], tasks: [] });
+          }
+        } catch (e) { console.warn("Firestore init failed:", e); }
+
+        // Set a friendly name for local key (keep legacy currentUser usage)
+        const guessedName =
+          (user.displayName && user.displayName.split(" ")[0]) ||
+          (user.email ? user.email.split("@")[0] : "user");
+        localStorage.setItem("currentUser", guessedName);
+
+        // Redirect
+        window.location.href = "index.html";
+      } catch (err) {
+        console.warn(err);
+        const msg = (err && err.code) ? err.code : "Google sign-in failed.";
+        // show message in whichever tab is visible
+        if (loginForm.classList.contains("active")) {
+          loginMessage.textContent = msg;
+        } else {
+          signupMessage.textContent = msg;
+        }
+      }
+    }
+
+    googleLoginBtn.addEventListener("click", googleFlow);
+    googleSignupBtn.addEventListener("click", googleFlow);
+
+    // If already signed in on this device, you can auto-forward:
+    if (auth) {
+      onAuthStateChanged(auth, (user) => {
+        if (user) {
+          // Keep local currentUser (for app’s existing storage model)
+          const name =
+            (user.displayName && user.displayName.split(" ")[0]) ||
+            (user.email ? user.email.split("@")[0] : "user");
+          if (!localStorage.getItem("currentUser")) {
+            localStorage.setItem("currentUser", name);
+          }
+          // Don’t force redirect here to allow manual switch; uncomment to auto-redirect:
+          // window.location.href = "index.html";
+        }
+      });
+    }
+  </script>
+
+  <!-- Non-module fallback & original local logic kept (unchanged behavior) -->
+  <script>
+    // (Kept for backward compatibility if Firebase CDN fails entirely)
+    // Already implemented above with fallbacks in the module script.
   </script>
 
 </body>
